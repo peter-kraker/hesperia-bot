@@ -10,6 +10,33 @@ I followed the following guides to build this bot:
 * PubSub Quickstart guide: https://cloud.google.com/pubsub/docs/quickstart-client-libraries
 * Scheduling compute instances with Cloud Scheduler: https://cloud.google.com/scheduler/docs/start-and-stop-compute-engine-instances-on-a-schedule
 
+## Setup
+
+From a "stock" debian or ubuntu install:
+
+1. Install python
+
+> sudo apt-get install python3
+
+2. Install pip
+
+> sudo apt-get install python3-pip
+
+3. Install the discord libraries
+
+> pip3 install -U discord.py
+> pip3 install -U python-dotenv
+
+4. Install and initialize the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
+
+5. Install the [Google PubSub python client libraries](https://cloud.google.com/pubsub/docs/quickstart-client-libraries)
+
+> pip install --upgrade google-cloud-pubsub
+    
+Be sure to set up your environment variables properly:
+
+"Set the environment variable GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON file that contains your service account key. This variable only applies to your current shell session, so if you open a new session, set the variable again."
+
 ## Usage
 
     $ python3 bot.py
