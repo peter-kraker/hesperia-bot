@@ -54,3 +54,17 @@ Be sure to set up your environment variables properly:
 ### Status
 
 !status - Will return the number of players currently logged into the server
+
+## Architecture
+
+There are a few components to this system: 
+
+* The Discord Bot
+* The Valheim server (LinuxGSM)
+* Google's Cloud Services
+    *  Compute Engine
+    *  PubSub
+    *  Cloud Scheudler
+    *  Cloud Functions
+
+The Discord bot uses Dicord's python library to manage the interaction with the Discord servers. The 'Bot' Client sub-class implements 'commands' that are called when a user types the correct 
