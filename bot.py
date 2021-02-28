@@ -69,7 +69,7 @@ GOOGLE = os.getenv('GOOGLE_JSON')
 ## Google Environment
 
 # If pubsub fails because of "auth scopes" be sure to:
-# export GOOGLE_APPLICATION_CREDENTIALS="/home/petes256/discord/valheim-a13e89a6204a.json"
+# export GOOGLE_APPLICATION_CREDENTIALS="/home/$username/$credentials.json"
 
 f = open(GOOGLE)
 google_creds = json.loads(f.read())
@@ -157,7 +157,18 @@ async def status(ctx):
 
 @bot.command(name='update', help='Updates and restarts the server.')
 async def update(ctx):
+    # This should only work while the server is online and has 0 players:
+    # Server will stop vhserver
+    # Server will run the updates
+    # Server will start vhserver
     if not vhserver.isOnline():
+        response = "The server is offline. To update, please start the server and try again with 0 players."
+        await ctx.send(resposne)
+        return
+        # Send an update request via pubsub
+
+    # Respond, saying the server is online.
+
         
 
 bot.run(TOKEN)
