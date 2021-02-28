@@ -19,6 +19,8 @@ class Server:
         self.ipaddr = ip
         self.port = port
 
+    # Send a Source Engine Query to Steam, and parse the results.
+    # Returns the number of players on the server.
     def __query(self, ip, port):
         self.addr = (ip, port)
         message = '\xff\xff\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79\x00'
@@ -30,12 +32,10 @@ class Server:
 
         return data
 
-
-    # Send a Source Engine Query to Steam, and parse the results.
-    # Returns the number of players on the server.
     def getPlayers(self):
         raw = self.__query(self.ipaddr, self.port)
 
+        # Decode and parse the query response
         # Protocol Reference: https://developer.valvesoftware.com/wiki/Server_queries 
         response = raw.decode('utf-8', errors='ignore')[2:].split(chr(0x0))
         players_response = response[6] # Player count is item 7 in the response
@@ -55,7 +55,8 @@ class Server:
 
         return True
 
-## Discord Environment
+
+## Load Environment
 
 load_dotenv('./.env')
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -68,7 +69,7 @@ GOOGLE = os.getenv('GOOGLE_JSON')
 ## Google Environment
 
 # If pubsub fails because of "auth scopes" be sure to:
-# export GOOGLE_APPLICATION_CREDENTIALS="$HOME/[credentials].json"
+# export GOOGLE_APPLICATION_CREDENTIALS="/home/petes256/discord/valheim-a13e89a6204a.json"
 
 f = open(GOOGLE)
 google_creds = json.loads(f.read())
@@ -76,7 +77,6 @@ google_creds = json.loads(f.read())
 
 ## PubSub Setup
 
-publisher = pubsub_v1.PublisherClient()
 project_id = google_creds['project_id']
 
 response_topic_id = "status-response-hesperia-event"
@@ -84,6 +84,7 @@ start_topic_id = "start-hesperia-event"
 status_topic_id = "status-hesperia-event"
 stop_topic_id = "stop-hesperia-event"
 
+publisher = pubsub_v1.PublisherClient()
 response_topic_path = publisher.topic_path(project_id, response_topic_id)
 start_topic_path = publisher.topic_path(project_id, start_topic_id)
 status_topic_path = publisher.topic_path(project_id, status_topic_id)
@@ -95,6 +96,8 @@ stop_topic_path = publisher.topic_path(project_id, stop_topic_id)
 bot = commands.Bot(command_prefix='!')
 vhserver = Server(IPADDR, PORT)
 
+
+## Bot Commands
 
 @bot.command(name='start', help='Starts the Valheim server (Hesperia) if it\'s not already online.')
 async def start(ctx):
@@ -151,5 +154,10 @@ async def status(ctx):
     else:
         response = 'There are %s vikings in Hesperia.'% num_players
     await ctx.send(response)
+
+@bot.command(name='update', help='Updates and restarts the server.')
+async def update(ctx):
+    if not vhserver.isOnline():
+        
 
 bot.run(TOKEN)
