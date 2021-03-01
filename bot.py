@@ -55,6 +55,9 @@ class Server:
 
         return True
 
+async def write_to_discord(message, ctx):
+    await ctx.send(message)
+
 
 ## Load Environment
 
@@ -79,16 +82,22 @@ google_creds = json.loads(f.read())
 
 project_id = google_creds['project_id']
 
-response_topic_id = "status-response-hesperia-event"
 start_topic_id = "start-hesperia-event"
 status_topic_id = "status-hesperia-event"
 stop_topic_id = "stop-hesperia-event"
+update_topic_id = "update-hesperia-event"
+
+response_subscription_id = "status-response-hesperia-event-sub"
 
 publisher = pubsub_v1.PublisherClient()
-response_topic_path = publisher.topic_path(project_id, response_topic_id)
+subscriber = pubsub_v1.SubscriberClient()
+
 start_topic_path = publisher.topic_path(project_id, start_topic_id)
 status_topic_path = publisher.topic_path(project_id, status_topic_id)
 stop_topic_path = publisher.topic_path(project_id, stop_topic_id)
+update_topic_path = publisher.topic_path(project_id, update_topic_id)
+
+response_subscription_path = subscriber.subscription_path(project_id, response_subscription_id)
 
 
 ## Discord Setup
@@ -102,38 +111,32 @@ vhserver = Server(IPADDR, PORT)
 @bot.command(name='start', help='Starts the Valheim server (Hesperia) if it\'s not already online.')
 async def start(ctx):
     if not vhserver.isOnline():
-        response = "Starting Hesperia.... This can take 15-20 minutes"
-        await ctx.send(response)
+        await write_to_discord("Starting Hesperia.... This can take 15-20 minutes", ctx)
 
         data = '{"zone":"us-central1-a","label":"world=hesperia"}'
         data = data.encode("utf-8")
         future = publisher.publish(start_topic_path, data)
         print('Starting up: %s'%future.result())
 
-        response = "Initializing... Check back in 3 minutes"
         while not vhserver.isOnline():
             time.sleep(180)
-            await ctx.send(response)
+            await write_to_discord("Initializing... Check back in 3 minutes", ctx)
 
-    response = "Hesperia is online."
-    await ctx.send(response)
+    await write_to_discord("Hesperia is online.", ctx)
     return
 
 @bot.command(name='stop', help='Stops the Valheim Server (Hesperia). Nothing happens if somebody is still logged in.')
 async def stop(ctx):
     if not vhserver.isOnline():
-        response = "The server is already offline."
-        await ctx.send(response)
+        await write_to_discord("The server is already offline.", ctx)
         return
 
     num_players = vhserver.getPlayers()
 
     if num_players > 0:
-        response = "Sorry, there are still %s vikings in Hesperia."%num_players
-        await ctx.send(response)
+        await write_to_discord("Sorry, there are still %s vikings in Hesperia."%num_players, ctx)
     else:
-        response = "Shutting down Hesperia..."
-        await ctx.send(response)
+        await write_to_discord("Shutting down Hesperia...", ctx)
         data = '{"zone":"us-central1-a","label":"world=hesperia"}'
         data = data.encode('utf-8')
         future = publisher.publish(stop_topic_path, data)
@@ -143,8 +146,7 @@ async def stop(ctx):
 @bot.command(name='status', help='Responds with the number of players currently logged in.')
 async def status(ctx):
     if not vhserver.isOnline():
-        response = "The server is offline."
-        await ctx.send(response)
+        await write_to_discord("The server is offline.", ctx)
         return
 
     num_players = vhserver.getPlayers()
@@ -153,22 +155,53 @@ async def status(ctx):
         response = 'There is %s viking in Hesperia.'% num_players
     else:
         response = 'There are %s vikings in Hesperia.'% num_players
-    await ctx.send(response)
+    await write_to_discord(response, ctx)
+    return
 
-@bot.command(name='update', help='Updates and restarts the server.')
+# @bot.command(name='udate', help='Updates and restarts the server.')
 async def update(ctx):
     # This should only work while the server is online and has 0 players:
     # Server will stop vhserver
     # Server will run the updates
     # Server will start vhserver
     if not vhserver.isOnline():
-        response = "The server is offline. To update, please start the server and try again with 0 players."
-        await ctx.send(resposne)
+        await write_to_discord("The server is offline. To update, please start the server and try again with 0 players.",ctx)
         return
-        # Send an update request via pubsub
 
-    # Respond, saying the server is online.
+    write_to_discord("Updating Hesperia, one moment please.", ctx)
 
+
+    # Send an update request to the server via pubsub
+    data = 'update'
+    data = data.encode('utf-8')
+    update_future = publisher.publish(update_topic_path, data)
+    print('Updating: %s..'%update_future.result())
+
+    def response_callback(message):
+        print("Received %s."%message.data)
+        message.ack()
+        if message.data.decode('utf-8') == "{done}":
+            raise Exception('Update Complete')
+        return message.data
+
+    response_future = subscriber.subscribe(response_subscription_path, callback=response_callback)
+    print ("Listening for messages on %s.."%response_subscription_path)
+
+
+    with subscriber:
+        try:
+            response = response_future.result()
+            await ctx.send(response)
+        except (KeyboardInterrupt, TimeoutError):
+            response_future.cancel()
+        except e:
+            response_future.cancel()
+            print(e)
+
+    response = "Server has been updated"
+    await ctx.send(response)
+
+    return
         
 
 bot.run(TOKEN)
