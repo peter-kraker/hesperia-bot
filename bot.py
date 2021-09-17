@@ -6,10 +6,24 @@ import json
 import os
 import socket
 import time
+import datetime
+import asyncio
 
+
+# from google.api_core import retry
 from discord.ext import commands
 from dotenv import load_dotenv
 from google.cloud import pubsub_v1
+
+# User-defined exception class used for message routing
+
+class VhserverException(Exception):
+    def __init__(self, message):
+        self.message = message
+
+class DoneException(Exception):
+    def __init__(self, message):
+        self.message = message
 
 # Helper Class representing the vhserver instance.
 
@@ -21,6 +35,7 @@ class Server:
 
     # Send a Source Engine Query to Steam, and parse the results.
     # Returns the number of players on the server.
+
     def __query(self, ip, port):
         self.addr = (ip, port)
         message = '\xff\xff\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79\x00'
@@ -28,6 +43,24 @@ class Server:
         client_socket.settimeout(2.0)
 
         client_socket.sendto(message.encode(), self.addr)
+
+        # Steam implemented a challenge to the INFO Request packet in Dec 2020
+        #   After sending the info request, the server will respond with a
+        #   4-byte challenge packet that you need to re-send, appended 
+        #   to the request.
+
+        # Read the challenge off the wire
+        challenge = client_socket.recvfrom(2048)[0]
+
+        # The challenge looks like 4 bytes of header (FFFFFFFF), followed by 1
+        #   byte of "A" i.e. \x41:
+        #
+        #   FF FF FF FF 41 DE AD BE EF
+        #
+        response = challenge[5:]
+
+        # Send the request again with the challenge appended.
+        client_socket.sendto((message.encode())+response, self.addr)
         data = client_socket.recvfrom(2048)[0]
 
         return data
@@ -158,17 +191,17 @@ async def status(ctx):
     await write_to_discord(response, ctx)
     return
 
-# @bot.command(name='udate', help='Updates and restarts the server.')
+#@bot.command(name='update', help='Updates and restarts the server.')
 async def update(ctx):
     # This should only work while the server is online and has 0 players:
     # Server will stop vhserver
     # Server will run the updates
     # Server will start vhserver
-    if not vhserver.isOnline():
-        await write_to_discord("The server is offline. To update, please start the server and try again with 0 players.",ctx)
-        return
+#    if not vhserver.isOnline():
+#        await write_to_discord("The server is offline. To update, please start the server and try again with 0 players.",ctx)
+#        return
 
-    write_to_discord("Updating Hesperia, one moment please.", ctx)
+    await write_to_discord("Updating Hesperia, one moment please.", ctx)
 
 
     # Send an update request to the server via pubsub
@@ -178,29 +211,53 @@ async def update(ctx):
     print('Updating: %s..'%update_future.result())
 
     def response_callback(message):
-        print("Received %s."%message.data)
+        print(ctx)
+        print(" Inside: %s."%message.data.decode('utf-8'))
+        asyncio.run(asyncio.wait_for(ctx.send(message.data), 15))
+        # write_to_discord(message.data.decode('utf-8'), ctx)
         message.ack()
-        if message.data.decode('utf-8') == "{done}":
-            raise Exception('Update Complete')
-        return message.data
 
+
+    # We want to ignore all messages that were delievered before we started listening.
+    seekreq = pubsub_v1.types.SeekRequest(subscription=response_subscription_path, time=datetime.datetime.now())
+    subscriber.seek(seekreq)
+
+    # Start listening to what vhserver is telling us
     response_future = subscriber.subscribe(response_subscription_path, callback=response_callback)
     print ("Listening for messages on %s.."%response_subscription_path)
 
-
+#    update_is_done = False
+#    while subscriber:
+#        response = subscriber.pull(
+#                request={"subscription": response_subscription_path, "max_messages": 10},
+#                retry=retry.Retry(deadline=10),
+#                )
+#
+#        ack_ids = []
+#        for received_message in response.received_messages:
+#            vhserver_response = received_message.message.data.decode('utf-8')
+#            if vhserver_response == "{done}":
+#                update_is_done = True
+#
+#            await write_to_discord(received_message.message.data.decode('utf-8'), ctx)
+#            ack_ids.append(received_message.ack_id)
+#
+#        subscriber.acknowledge(
+#            request={"subscription": response_subscription_path, "ack_ids": ack_ids}
+#        )
+#
+#        if update_is_done == True:
+#            break
     with subscriber:
         try:
-            response = response_future.result()
-            await ctx.send(response)
-        except (KeyboardInterrupt, TimeoutError):
-            response_future.cancel()
-        except e:
-            response_future.cancel()
-            print(e)
+            print(response_future.result())
 
-    response = "Server has been updated"
-    await ctx.send(response)
+        except (KeyboardInterrupt, TimeoutError) as e:
+            response_future.cancel()
+        except Exception as e:
+            response_future.cancel()
 
+    await write_to_discord("Server has been updated", ctx)
     return
         
 
