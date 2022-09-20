@@ -135,16 +135,24 @@ response_subscription_path = subscriber.subscription_path(project_id, response_s
 
 ## Discord Setup
 
-bot = commands.Bot(command_prefix='!')
+intents = discord.Intents.default()
+intents.messages = True
+bot = commands.Bot(command_prefix='!', intents=intents)
 vhserver = Server(IPADDR, PORT)
+
+@bot.event
+async def on_ready():
+    print(f'{bot.user} has connected to Discord!\nConnecting to:')
+    for guild in bot.guilds:
+        print(f'.. {guild.name}')
 
 
 ## Bot Commands
 
-@bot.command(name='start', help='Starts the Valheim server (Hesperia) if it\'s not already online.')
+@bot.command(name='start', help='Starts the Valheim server (Vault616) if it\'s not already online.')
 async def start(ctx):
     if not vhserver.isOnline():
-        await write_to_discord("Starting Hesperia.... This can take 15-20 minutes", ctx)
+        await write_to_discord("Starting Vault616.... This can take 15-20 minutes", ctx)
 
         data = '{"zone":"us-central1-a","label":"world=hesperia"}'
         data = data.encode("utf-8")
@@ -158,7 +166,7 @@ async def start(ctx):
     await write_to_discord("Hesperia is online.", ctx)
     return
 
-@bot.command(name='stop', help='Stops the Valheim Server (Hesperia). Nothing happens if somebody is still logged in.')
+@bot.command(name='stop', help='Stops the Valheim Server (Vault616). Nothing happens if somebody is still logged in.')
 async def stop(ctx):
     if not vhserver.isOnline():
         await write_to_discord("The server is already offline.", ctx)
@@ -167,9 +175,9 @@ async def stop(ctx):
     num_players = vhserver.getPlayers()
 
     if num_players > 0:
-        await write_to_discord("Sorry, there are still %s vikings in Hesperia."%num_players, ctx)
+        await write_to_discord("Sorry, there are still %s vikings in Vault616."%num_players, ctx)
     else:
-        await write_to_discord("Shutting down Hesperia...", ctx)
+        await write_to_discord("Shutting down Vault616...", ctx)
         data = '{"zone":"us-central1-a","label":"world=hesperia"}'
         data = data.encode('utf-8')
         future = publisher.publish(stop_topic_path, data)
@@ -185,9 +193,16 @@ async def status(ctx):
     num_players = vhserver.getPlayers()
 
     if num_players == 1:
-        response = 'There is %s viking in Hesperia.'% num_players
+        response = 'There is %s viking in Vault616.'% num_players
     else:
-        response = 'There are %s vikings in Hesperia.'% num_players
+        response = 'There are %s vikings in Vault616.'% num_players
+    await write_to_discord(response, ctx)
+    return
+
+@bot.command(name='info', help='Server Info.')
+async def status(ctx):
+    response = 'Vault616 Server Info:\n```  Server Name: Vault616\n  IP address: 35.208.212.176:2456\n  Server Password: StayAtHomeDads```To Join, use Steam\'s server window to add by IP:\nSteam > View > Servers > Favorites > [Right Click] "Add by IP Address > "35.208.212.176:2456"' 
+
     await write_to_discord(response, ctx)
     return
 
